@@ -46,21 +46,27 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 import androidx.annotation.StringRes;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 
 /**
  * Snackbars provide lightweight feedback about an operation. They show a brief message at the
  * bottom of the screen on mobile and lower left on larger devices. Snackbars appear above all other
  * elements on screen and only one can be displayed at a time.
  *
- * <p>They automatically disappear after a timeout or after user interaction elsewhere on the
- * screen, particularly after interactions that summon a new surface or activity. Snackbars can be
- * swiped off screen.
- *
  * <p>Snackbars can contain an action which is set via {@link #setAction(CharSequence,
  * android.view.View.OnClickListener)}.
  *
+ * <p>Snackbars automatically disappear after a timeout. They can also be dismissed by being swiped
+ * off screen, by action click, from a new snackbar being displayed, or manually via a call to
+ * {@link #dismiss()}.
+ *
  * <p>To be notified when a snackbar has been shown or dismissed, you can provide a {@link Callback}
  * via {@link BaseTransientBottomBar#addCallback(BaseCallback)}.
+ *
+ * <p>For more information, see the <a
+ * href="https://github.com/material-components/material-components-android/blob/master/docs/components/Snackbar.md">component
+ * developer guidance</a> and <a href="https://material.io/components/snackbar/overview">design
+ * guidelines</a>.
  */
 public class Snackbar extends BaseTransientBottomBar<Snackbar> {
 
@@ -103,6 +109,13 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
   }
 
   @Nullable private BaseCallback<Snackbar> callback;
+
+  /**
+   * This is only used as a temporary flag to opt-out of the new dismissal behavior for Snackbar
+   * with actions, which will never time out.
+   */
+  @SuppressWarnings("unused")
+  private boolean useLegacyDismissalBehavior = false;
 
   private Snackbar(
       @NonNull Context context,
@@ -156,6 +169,27 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
   public static Snackbar make(
       @NonNull View view, @NonNull CharSequence text, @Duration int duration) {
     return makeInternal(/* context= */ null, view, text, duration);
+  }
+
+  /**
+   * Make a Snackbar to display a message.
+   *
+   * <p>Snackbar will try and find a parent view to hold Snackbar's view from the value given to
+   * {@code view}. Snackbar will walk up the view tree trying to find a suitable parent, which is
+   * defined as a {@link CoordinatorLayout} or the window decor's content view, whichever comes
+   * first.
+   *
+   * <p>Having a {@link CoordinatorLayout} in your view hierarchy allows Snackbar to enable certain
+   * features, such as swipe-to-dismiss and automatically moving of widgets.
+   *
+   * @param view The view to find a parent from.
+   * @param resId The resource id of the string resource to use. Can be formatted text.
+   * @param duration How long to display the message. Can be {@link #LENGTH_SHORT}, {@link
+   *     #LENGTH_LONG}, {@link #LENGTH_INDEFINITE}, or a custom duration in milliseconds.
+   */
+  @NonNull
+  public static Snackbar make(@NonNull View view, @StringRes int resId, @Duration int duration) {
+    return make(view, view.getResources().getText(resId), duration);
   }
 
   /**
@@ -242,27 +276,6 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
     return snackbarButtonStyleResId != -1 && snackbarTextViewStyleResId != -1;
   }
 
-  /**
-   * Make a Snackbar to display a message.
-   *
-   * <p>Snackbar will try and find a parent view to hold Snackbar's view from the value given to
-   * {@code view}. Snackbar will walk up the view tree trying to find a suitable parent, which is
-   * defined as a {@link CoordinatorLayout} or the window decor's content view, whichever comes
-   * first.
-   *
-   * <p>Having a {@link CoordinatorLayout} in your view hierarchy allows Snackbar to enable certain
-   * features, such as swipe-to-dismiss and automatically moving of widgets.
-   *
-   * @param view The view to find a parent from.
-   * @param resId The resource id of the string resource to use. Can be formatted text.
-   * @param duration How long to display the message. Can be {@link #LENGTH_SHORT}, {@link
-   *     #LENGTH_LONG}, {@link #LENGTH_INDEFINITE}, or a custom duration in milliseconds.
-   */
-  @NonNull
-  public static Snackbar make(@NonNull View view, @StringRes int resId, @Duration int duration) {
-    return make(view, view.getResources().getText(resId), duration);
-  }
-
   @Nullable
   private static ViewGroup findSuitableParent(View view) {
     ViewGroup fallback = null;
@@ -298,6 +311,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * @param message The new text for this {@link BaseTransientBottomBar}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setText(@NonNull CharSequence message) {
     getMessageView().setText(message);
     return this;
@@ -309,6 +323,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * @param resId The new text for this {@link BaseTransientBottomBar}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setText(@StringRes int resId) {
     return setText(getContext().getText(resId));
   }
@@ -320,6 +335,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * @param listener callback to be invoked when the action is clicked
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setAction(@StringRes int resId, View.OnClickListener listener) {
     return setAction(getContext().getText(resId), listener);
   }
@@ -331,6 +347,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * @param listener callback to be invoked when the action is clicked
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setAction(
       @Nullable CharSequence text, @Nullable final View.OnClickListener listener) {
     final TextView tv = getActionView();
@@ -349,6 +366,18 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
             dispatchDismiss(BaseCallback.DISMISS_EVENT_ACTION);
           });
     }
+    return this;
+  }
+
+  /**
+   * Set whether to use the legacy dismissal behavior for Snackbar with actions. This is a temporary
+   * flag to allow apps to migrate to the new behavior, which will never timeout the Snackbar with
+   * actions. Do not use this for new usages.
+   */
+  @NonNull
+  @CanIgnoreReturnValue
+  public Snackbar setUseLegacyDismissalBehavior(boolean useLegacyDismissalBehavior) {
+    this.useLegacyDismissalBehavior = useLegacyDismissalBehavior;
     return this;
   }
 
@@ -377,6 +406,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * #setText(int)}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setTextColor(ColorStateList colors) {
     getMessageView().setTextColor(colors);
     return this;
@@ -387,6 +417,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * #setText(int)}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setTextColor(@ColorInt int color) {
     getMessageView().setTextColor(color);
     return this;
@@ -397,6 +428,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * #setText(int)}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setTextMaxLines(int maxLines) {
     getMessageView().setMaxLines(maxLines);
     return this;
@@ -407,16 +439,18 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * View.OnClickListener)}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setActionTextColor(ColorStateList colors) {
     getActionView().setTextColor(colors);
     return this;
   }
 
   /**
-   * Sets the max width of the action to be in the same line as the message.
-   * If the width is exceeded the action would go to the next line.
+   * Sets the max width of the action to be in the same line as the message. If the width is
+   * exceeded the action would go to the next line.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setMaxInlineActionWidth(@Dimension int width) {
     getContentLayout().setMaxInlineActionWidth(width);
     return this;
@@ -427,6 +461,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    * View.OnClickListener)}.
    */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setActionTextColor(@ColorInt int color) {
     getActionView().setTextColor(color);
     return this;
@@ -434,18 +469,21 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
 
   /** Sets the tint color of the background Drawable. */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setBackgroundTint(@ColorInt int color) {
     return setBackgroundTintList(ColorStateList.valueOf(color));
   }
 
   /** Sets the tint color state list of the background Drawable. */
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setBackgroundTintList(@Nullable ColorStateList colorStateList) {
     view.setBackgroundTintList(colorStateList);
     return this;
   }
 
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setBackgroundTintMode(@Nullable PorterDuff.Mode mode) {
     view.setBackgroundTintMode(mode);
     return this;
@@ -464,6 +502,7 @@ public class Snackbar extends BaseTransientBottomBar<Snackbar> {
    */
   @Deprecated
   @NonNull
+  @CanIgnoreReturnValue
   public Snackbar setCallback(@Nullable Callback callback) {
     // The logic in this method emulates what we had before support for multiple
     // registered callbacks.

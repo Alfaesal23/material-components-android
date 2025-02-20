@@ -28,6 +28,7 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
+import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.SuppressLint;
@@ -39,7 +40,6 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -47,7 +47,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.util.AttributeSet;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -59,7 +58,6 @@ import android.view.ViewGroup.MarginLayoutParams;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowInsets;
-import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.FrameLayout;
 import androidx.annotation.ColorInt;
@@ -82,6 +80,8 @@ import com.google.android.material.behavior.SwipeDismissBehavior;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.internal.ThemeEnforcement;
 import com.google.android.material.internal.ViewUtils;
+import com.google.android.material.internal.WindowUtils;
+import com.google.android.material.motion.MotionUtils;
 import com.google.android.material.resources.MaterialResources;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -212,25 +212,31 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
   public static final int LENGTH_LONG = 0;
 
   // Legacy slide animation duration constant.
-  static final int ANIMATION_DURATION = 250;
+  static final int DEFAULT_SLIDE_ANIMATION_DURATION = 250;
   // Legacy slide animation content fade duration constant.
-  static final int ANIMATION_FADE_DURATION = 180;
+  static final int DEFAULT_ANIMATION_FADE_DURATION = 180;
+  // Legacy slide animation interpolator constant.
+  private static final TimeInterpolator DEFAULT_ANIMATION_SLIDE_INTERPOLATOR =
+      FAST_OUT_SLOW_IN_INTERPOLATOR;
 
   // Fade and scale animation constants.
-  private static final int ANIMATION_FADE_IN_DURATION = 150;
-  private static final int ANIMATION_FADE_OUT_DURATION = 75;
+  private static final int DEFAULT_ANIMATION_FADE_IN_DURATION = 150;
+  private static final int DEFAULT_ANIMATION_FADE_OUT_DURATION = 75;
+  private static final TimeInterpolator DEFAULT_ANIMATION_FADE_INTERPOLATOR = LINEAR_INTERPOLATOR;
+  private static final TimeInterpolator DEFAULT_ANIMATION_SCALE_INTERPOLATOR =
+      LINEAR_OUT_SLOW_IN_INTERPOLATOR;
   private static final float ANIMATION_SCALE_FROM_VALUE = 0.8f;
+
+  private final int animationFadeInDuration;
+  private final int animationFadeOutDuration;
+  private final int animationSlideDuration;
+  private final TimeInterpolator animationFadeInterpolator;
+  private final TimeInterpolator animationSlideInterpolator;
+  private final TimeInterpolator animationScaleInterpolator;
 
   @NonNull static final Handler handler;
   static final int MSG_SHOW = 0;
   static final int MSG_DISMISS = 1;
-
-  // On JB/KK versions of the platform sometimes View.setTranslationY does not result in
-  // layout / draw pass, and CoordinatorLayout relies on a draw pass to happen to sync vertical
-  // positioning of all its child views
-  private static final boolean USE_OFFSET_API =
-      (Build.VERSION.SDK_INT >= VERSION_CODES.JELLY_BEAN)
-          && (Build.VERSION.SDK_INT <= VERSION_CODES.KITKAT);
 
   private static final int[] SNACKBAR_STYLE_ATTR = new int[] {R.attr.snackbarStyle};
 
@@ -282,10 +288,12 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
           }
           // Calculate current bottom inset, factoring in translationY to account for where the
           // view will likely be animating to.
+          int screenHeight = WindowUtils.getCurrentWindowBounds(context).height();
           int currentInsetBottom =
-              getScreenHeight() - getViewAbsoluteBottom() + (int) view.getTranslationY();
+              screenHeight - getViewAbsoluteBottom() + (int) view.getTranslationY();
           if (currentInsetBottom >= extraBottomMarginGestureInset) {
             // No need to add extra offset if view is already outside of bottom gesture area
+            appliedBottomMarginGestureInset = extraBottomMarginGestureInset;
             return;
           }
 
@@ -297,6 +305,8 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
             return;
           }
 
+          appliedBottomMarginGestureInset = extraBottomMarginGestureInset;
+
           // Move view outside of bottom gesture area
           MarginLayoutParams marginParams = (MarginLayoutParams) layoutParams;
           marginParams.bottomMargin += extraBottomMarginGestureInset - currentInsetBottom;
@@ -307,8 +317,10 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
   private int extraBottomMarginWindowInset;
   private int extraLeftMarginWindowInset;
   private int extraRightMarginWindowInset;
-  private int extraBottomMarginGestureInset;
   private int extraBottomMarginAnchorView;
+
+  private int extraBottomMarginGestureInset;
+  private int appliedBottomMarginGestureInset;
 
   private boolean pendingShowingView;
 
@@ -368,11 +380,11 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
     }
     view.addView(content);
 
-    ViewCompat.setAccessibilityLiveRegion(view, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
-    ViewCompat.setImportantForAccessibility(view, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
+    view.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+    view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
 
     // Make sure that we fit system windows and have a listener to apply any insets
-    ViewCompat.setFitsSystemWindows(view, true);
+    view.setFitsSystemWindows(true);
     ViewCompat.setOnApplyWindowInsetsListener(
         view,
         new OnApplyWindowInsetsListener() {
@@ -413,14 +425,43 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
     accessibilityManager =
         (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+
+    animationSlideDuration = MotionUtils.resolveThemeDuration(context, R.attr.motionDurationLong2,
+        DEFAULT_SLIDE_ANIMATION_DURATION);
+    animationFadeInDuration = MotionUtils.resolveThemeDuration(context, R.attr.motionDurationLong2,
+        DEFAULT_ANIMATION_FADE_IN_DURATION);
+    animationFadeOutDuration =
+        MotionUtils.resolveThemeDuration(
+            context, R.attr.motionDurationMedium1, DEFAULT_ANIMATION_FADE_OUT_DURATION);
+    animationFadeInterpolator =
+        MotionUtils.resolveThemeInterpolator(
+            context,
+            R.attr.motionEasingEmphasizedInterpolator,
+            DEFAULT_ANIMATION_FADE_INTERPOLATOR);
+    animationScaleInterpolator =
+        MotionUtils.resolveThemeInterpolator(
+            context,
+            R.attr.motionEasingEmphasizedInterpolator,
+            DEFAULT_ANIMATION_SCALE_INTERPOLATOR);
+    animationSlideInterpolator =
+        MotionUtils.resolveThemeInterpolator(
+            context,
+            R.attr.motionEasingEmphasizedInterpolator,
+            DEFAULT_ANIMATION_SLIDE_INTERPOLATOR);
   }
 
   private void updateMargins() {
     LayoutParams layoutParams = view.getLayoutParams();
-    if (!(layoutParams instanceof MarginLayoutParams) || view.originalMargins == null) {
+    if (!(layoutParams instanceof MarginLayoutParams)) {
       Log.w(TAG, "Unable to update margins because layout params are not MarginLayoutParams");
       return;
     }
+
+    if (view.originalMargins == null) {
+      Log.w(TAG, "Unable to update margins because original view margins are not set");
+      return;
+    }
+
     if (view.getParent() == null) {
       // Parent will set layout params to view again. Wait for addView() is done to update layout
       // params, in case we save the already updated margins as the original margins.
@@ -429,17 +470,32 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
     int extraBottomMargin =
         getAnchorView() != null ? extraBottomMarginAnchorView : extraBottomMarginWindowInset;
-    MarginLayoutParams marginParams = (MarginLayoutParams) layoutParams;
-    marginParams.bottomMargin = view.originalMargins.bottom + extraBottomMargin;
-    marginParams.leftMargin = view.originalMargins.left + extraLeftMarginWindowInset;
-    marginParams.rightMargin = view.originalMargins.right + extraRightMarginWindowInset;
-    marginParams.topMargin = view.originalMargins.top;
-    view.requestLayout();
 
-    if (VERSION.SDK_INT >= VERSION_CODES.Q && shouldUpdateGestureInset()) {
-      // Ensure there is only one gesture inset runnable running at a time
-      view.removeCallbacks(bottomMarginGestureInsetRunnable);
-      view.post(bottomMarginGestureInsetRunnable);
+    MarginLayoutParams marginParams = (MarginLayoutParams) layoutParams;
+    int newBottomMargin = view.originalMargins.bottom + extraBottomMargin;
+    int newLeftMargin = view.originalMargins.left + extraLeftMarginWindowInset;
+    int newRightMargin = view.originalMargins.right + extraRightMarginWindowInset;
+    int newTopMargin = view.originalMargins.top;
+
+    boolean marginChanged =
+        marginParams.bottomMargin != newBottomMargin
+            || marginParams.leftMargin != newLeftMargin
+            || marginParams.rightMargin != newRightMargin
+            || marginParams.topMargin != newTopMargin;
+    if (marginChanged) {
+      marginParams.bottomMargin = newBottomMargin;
+      marginParams.leftMargin = newLeftMargin;
+      marginParams.rightMargin = newRightMargin;
+      marginParams.topMargin = newTopMargin;
+      view.requestLayout();
+    }
+
+    if (marginChanged || appliedBottomMarginGestureInset != extraBottomMarginGestureInset) {
+      if (VERSION.SDK_INT >= VERSION_CODES.Q && shouldUpdateGestureInset()) {
+        // Ensure there is only one gesture inset runnable running at a time
+        view.removeCallbacks(bottomMarginGestureInsetRunnable);
+        view.post(bottomMarginGestureInsetRunnable);
+      }
     }
   }
 
@@ -724,7 +780,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       view.setVisibility(View.INVISIBLE);
     }
 
-    if (ViewCompat.isLaidOut(this.view)) {
+    if (view.isLaidOut()) {
       showViewImpl();
       return;
     }
@@ -767,6 +823,10 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
   }
 
   private void showViewImpl() {
+    if (ViewCompat.getAccessibilityPaneTitle(view) == null) {
+      ViewCompat.setAccessibilityPaneTitle(
+          view, getContext().getString(R.string.snackbar_accessibility_pane_title));
+    }
     if (shouldAnimate()) {
       // If animations are enabled, animate it in
       animateViewIn();
@@ -781,16 +841,8 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
   private int getViewAbsoluteBottom() {
     int[] absoluteLocation = new int[2];
-    view.getLocationOnScreen(absoluteLocation);
+    view.getLocationInWindow(absoluteLocation);
     return absoluteLocation[1] + view.getHeight();
-  }
-
-  @RequiresApi(VERSION_CODES.JELLY_BEAN_MR1)
-  private int getScreenHeight() {
-    WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-    DisplayMetrics displayMetrics = new DisplayMetrics();
-    windowManager.getDefaultDisplay().getRealMetrics(displayMetrics);
-    return displayMetrics.heightPixels;
   }
 
   private void setUpBehavior(CoordinatorLayout.LayoutParams lp) {
@@ -840,11 +892,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
   }
 
   private void recalculateAndUpdateMargins() {
-    int newBottomMarginAnchorView = calculateBottomMarginForAnchorView();
-    if (newBottomMarginAnchorView == extraBottomMarginAnchorView) {
-      return;
-    }
-    extraBottomMarginAnchorView = newBottomMarginAnchorView;
+    extraBottomMarginAnchorView = calculateBottomMarginForAnchorView();
     updateMargins();
   }
 
@@ -900,7 +948,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
     AnimatorSet animatorSet = new AnimatorSet();
     animatorSet.playTogether(alphaAnimator, scaleAnimator);
-    animatorSet.setDuration(ANIMATION_FADE_IN_DURATION);
+    animatorSet.setDuration(animationFadeInDuration);
     animatorSet.addListener(
         new AnimatorListenerAdapter() {
           @Override
@@ -913,7 +961,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
   private void startFadeOutAnimation(final int event) {
     ValueAnimator animator = getAlphaAnimator(1, 0);
-    animator.setDuration(ANIMATION_FADE_OUT_DURATION);
+    animator.setDuration(animationFadeOutDuration);
     animator.addListener(
         new AnimatorListenerAdapter() {
           @Override
@@ -926,7 +974,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
   private ValueAnimator getAlphaAnimator(float... alphaValues) {
     ValueAnimator animator = ValueAnimator.ofFloat(alphaValues);
-    animator.setInterpolator(LINEAR_INTERPOLATOR);
+    animator.setInterpolator(animationFadeInterpolator);
     animator.addUpdateListener(
         new AnimatorUpdateListener() {
           @Override
@@ -939,7 +987,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
   private ValueAnimator getScaleAnimator(float... scaleValues) {
     ValueAnimator animator = ValueAnimator.ofFloat(scaleValues);
-    animator.setInterpolator(LINEAR_OUT_SLOW_IN_INTERPOLATOR);
+    animator.setInterpolator(animationScaleInterpolator);
     animator.addUpdateListener(
         new AnimatorUpdateListener() {
           @Override
@@ -954,22 +1002,19 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
 
   private void startSlideInAnimation() {
     final int translationYBottom = getTranslationYBottom();
-    if (USE_OFFSET_API) {
-      ViewCompat.offsetTopAndBottom(view, translationYBottom);
-    } else {
-      view.setTranslationY(translationYBottom);
-    }
+    view.setTranslationY(translationYBottom);
 
     ValueAnimator animator = new ValueAnimator();
     animator.setIntValues(translationYBottom, 0);
-    animator.setInterpolator(FAST_OUT_SLOW_IN_INTERPOLATOR);
-    animator.setDuration(ANIMATION_DURATION);
+    animator.setInterpolator(animationSlideInterpolator);
+    animator.setDuration(animationSlideDuration);
     animator.addListener(
         new AnimatorListenerAdapter() {
           @Override
           public void onAnimationStart(Animator animator) {
             contentViewCallback.animateContentIn(
-                ANIMATION_DURATION - ANIMATION_FADE_DURATION, ANIMATION_FADE_DURATION);
+                animationSlideDuration - animationFadeInDuration,
+                animationFadeInDuration);
           }
 
           @Override
@@ -979,20 +1024,11 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
         });
     animator.addUpdateListener(
         new ValueAnimator.AnimatorUpdateListener() {
-          private int previousAnimatedIntValue = translationYBottom;
 
           @Override
           public void onAnimationUpdate(@NonNull ValueAnimator animator) {
             int currentAnimatedIntValue = (int) animator.getAnimatedValue();
-            if (USE_OFFSET_API) {
-              // On JB/KK versions of the platform sometimes View.setTranslationY does not
-              // result in layout / draw pass
-              ViewCompat.offsetTopAndBottom(
-                  view, currentAnimatedIntValue - previousAnimatedIntValue);
-            } else {
-              view.setTranslationY(currentAnimatedIntValue);
-            }
-            previousAnimatedIntValue = currentAnimatedIntValue;
+            view.setTranslationY(currentAnimatedIntValue);
           }
         });
     animator.start();
@@ -1001,13 +1037,13 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
   private void startSlideOutAnimation(final int event) {
     ValueAnimator animator = new ValueAnimator();
     animator.setIntValues(0, getTranslationYBottom());
-    animator.setInterpolator(FAST_OUT_SLOW_IN_INTERPOLATOR);
-    animator.setDuration(ANIMATION_DURATION);
+    animator.setInterpolator(animationSlideInterpolator);
+    animator.setDuration(animationSlideDuration);
     animator.addListener(
         new AnimatorListenerAdapter() {
           @Override
           public void onAnimationStart(Animator animator) {
-            contentViewCallback.animateContentOut(0, ANIMATION_FADE_DURATION);
+            contentViewCallback.animateContentOut(0, animationFadeOutDuration);
           }
 
           @Override
@@ -1017,20 +1053,11 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
         });
     animator.addUpdateListener(
         new ValueAnimator.AnimatorUpdateListener() {
-          private int previousAnimatedIntValue = 0;
 
           @Override
           public void onAnimationUpdate(@NonNull ValueAnimator animator) {
             int currentAnimatedIntValue = (int) animator.getAnimatedValue();
-            if (USE_OFFSET_API) {
-              // On JB/KK versions of the platform sometimes View.setTranslationY does not
-              // result in layout / draw pass
-              ViewCompat.offsetTopAndBottom(
-                  view, currentAnimatedIntValue - previousAnimatedIntValue);
-            } else {
-              view.setTranslationY(currentAnimatedIntValue);
-            }
-            previousAnimatedIntValue = currentAnimatedIntValue;
+            view.setTranslationY(currentAnimatedIntValue);
           }
         });
     animator.start();
@@ -1133,8 +1160,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       context = getContext();
       TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.SnackbarLayout);
       if (a.hasValue(R.styleable.SnackbarLayout_elevation)) {
-        ViewCompat.setElevation(
-            this, a.getDimensionPixelSize(R.styleable.SnackbarLayout_elevation, 0));
+        setElevation(a.getDimensionPixelSize(R.styleable.SnackbarLayout_elevation, 0));
       }
       animationMode = a.getInt(R.styleable.SnackbarLayout_animationMode, ANIMATION_MODE_SLIDE);
       if (a.hasValue(R.styleable.SnackbarLayout_shapeAppearance)
@@ -1162,7 +1188,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       setFocusable(true);
 
       if (getBackground() == null) {
-        ViewCompat.setBackground(this, createThemedBackground());
+        setBackground(createThemedBackground());
       }
     }
 
@@ -1175,8 +1201,8 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
     public void setBackgroundDrawable(@Nullable Drawable drawable) {
       if (drawable != null && backgroundTint != null) {
         drawable = DrawableCompat.wrap(drawable.mutate());
-        DrawableCompat.setTintList(drawable, backgroundTint);
-        DrawableCompat.setTintMode(drawable, backgroundTintMode);
+        drawable.setTintList(backgroundTint);
+        drawable.setTintMode(backgroundTintMode);
       }
       super.setBackgroundDrawable(drawable);
     }
@@ -1186,8 +1212,8 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       this.backgroundTint = backgroundTint;
       if (getBackground() != null) {
         Drawable wrappedBackground = DrawableCompat.wrap(getBackground().mutate());
-        DrawableCompat.setTintList(wrappedBackground, backgroundTint);
-        DrawableCompat.setTintMode(wrappedBackground, backgroundTintMode);
+        wrappedBackground.setTintList(backgroundTint);
+        wrappedBackground.setTintMode(backgroundTintMode);
         if (wrappedBackground != getBackground()) {
           super.setBackgroundDrawable(wrappedBackground);
         }
@@ -1199,7 +1225,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       this.backgroundTintMode = backgroundTintMode;
       if (getBackground() != null) {
         Drawable wrappedBackground = DrawableCompat.wrap(getBackground().mutate());
-        DrawableCompat.setTintMode(wrappedBackground, backgroundTintMode);
+        wrappedBackground.setTintMode(backgroundTintMode);
         if (wrappedBackground != getBackground()) {
           super.setBackgroundDrawable(wrappedBackground);
         }
@@ -1236,7 +1262,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
       if (baseTransientBottomBar != null) {
         baseTransientBottomBar.onAttachedToWindow();
       }
-      ViewCompat.requestApplyInsets(this);
+      requestApplyInsets();
     }
 
     @Override
@@ -1314,7 +1340,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
               : createGradientDrawableBackground(backgroundColor, getResources());
       if (backgroundTint != null) {
         Drawable wrappedDrawable = DrawableCompat.wrap(background);
-        DrawableCompat.setTintList(wrappedDrawable, backgroundTint);
+        wrappedDrawable.setTintList(backgroundTint);
         return wrappedDrawable;
       } else {
         return DrawableCompat.wrap(background);
@@ -1420,7 +1446,7 @@ public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>
     static Anchor anchor(
         @NonNull BaseTransientBottomBar transientBottomBar, @NonNull View anchorView) {
       Anchor anchor = new Anchor(transientBottomBar, anchorView);
-      if (ViewCompat.isAttachedToWindow(anchorView)) {
+      if (anchorView.isAttachedToWindow()) {
         ViewUtils.addOnGlobalLayoutListener(anchorView, anchor);
       }
       anchorView.addOnAttachStateChangeListener(anchor);

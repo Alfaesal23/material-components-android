@@ -20,14 +20,13 @@ import io.material.catalog.R;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentTransaction;
 import android.view.View;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.transition.Hold;
@@ -39,7 +38,9 @@ public abstract class FeatureDemoUtils {
   static final String ARG_TRANSITION_NAME = "ARG_TRANSITION_NAME";
 
   private static final int MAIN_ACTIVITY_FRAGMENT_CONTAINER_ID = R.id.container;
-  private static final String DEFAULT_CATALOG_DEMO = "default_catalog_demo";
+  private static final String KEY_DEFAULT_CATALOG_DEMO_LANDING =
+      "default_catalog_demo_landing_preference";
+  private static final String KEY_DEFAULT_CATALOG_DEMO = "default_catalog_demo_preference";
 
   public static void startFragment(FragmentActivity activity, Fragment fragment, String tag) {
     startFragmentInternal(activity, fragment, tag, null, null);
@@ -49,8 +50,8 @@ public abstract class FeatureDemoUtils {
       FragmentActivity activity,
       Fragment fragment,
       String tag,
-      View sharedElement,
-      String sharedElementName) {
+      @Nullable View sharedElement,
+      @Nullable String sharedElementName) {
     startFragmentInternal(activity, fragment, tag, sharedElement, sharedElementName);
   }
 
@@ -62,9 +63,7 @@ public abstract class FeatureDemoUtils {
       @Nullable String sharedElementName) {
     FragmentTransaction transaction = activity.getSupportFragmentManager().beginTransaction();
 
-    if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP
-        && sharedElement != null
-        && sharedElementName != null) {
+    if (sharedElement != null && sharedElementName != null) {
       Fragment currentFragment = getCurrentFragment(activity);
 
       Context context = currentFragment.requireContext();
@@ -109,15 +108,29 @@ public abstract class FeatureDemoUtils {
         .findFragmentById(MAIN_ACTIVITY_FRAGMENT_CONTAINER_ID);
   }
 
-  public static String getDefaultDemo(Context context) {
+  @NonNull
+  public static String getDefaultDemoLanding(@NonNull Context context) {
     SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-    return preferences.getString(DEFAULT_CATALOG_DEMO, "");
+    return preferences.getString(KEY_DEFAULT_CATALOG_DEMO_LANDING, "");
   }
 
-  public static void saveDefaultDemo(Context context, String val) {
+  public static void saveDefaultDemoLanding(@NonNull Context context, @NonNull String val) {
     SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
     SharedPreferences.Editor editor = preferences.edit();
-    editor.putString(DEFAULT_CATALOG_DEMO, val);
+    editor.putString(KEY_DEFAULT_CATALOG_DEMO_LANDING, val);
+    editor.apply();
+  }
+
+  @NonNull
+  public static String getDefaultDemo(@NonNull Context context) {
+    SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+    return preferences.getString(KEY_DEFAULT_CATALOG_DEMO, "");
+  }
+
+  public static void saveDefaultDemo(@NonNull Context context, @NonNull String val) {
+    SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+    SharedPreferences.Editor editor = preferences.edit();
+    editor.putString(KEY_DEFAULT_CATALOG_DEMO, val);
     editor.apply();
   }
 }

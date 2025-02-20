@@ -15,9 +15,15 @@ path: /catalog/time-pickers/
 
 **Contents**
 
+*   [Design and API Documentation](#design-and-api-documentation)
 *   [Using time pickers](#using-time-pickers)
 *   [Time pickers](#time-pickers)
 *   [Theming time pickers](#theming-time-pickers)
+
+## Design and API Documentation
+
+*   [Google Material3 Spec](https://material.io/components/time-pickers/overview)
+*   [API Reference](https://developer.android.com/reference/com/google/android/material/timepicker/package-summary)
 
 ## Using time pickers
 
@@ -44,19 +50,28 @@ val picker =
         .setTimeFormat(TimeFormat.CLOCK_12H)
         .setHour(12)
         .setMinute(10)
-        .setTitle("Select Appointment time")
+        .setTitleText("Select Appointment time")
         .build()
 ```
 
 `minute` is a *[0, 60)* value and hour is a *[0, 23]* value regardless of which
 time format you choose.
 
-You can use either `TimeFormat.CLOCK_12H` or `TimeFormat.CLOCK_24H`, depending
-on the location of the device:
+You can use either `TimeFormat.CLOCK_12H` (1 ring) or `TimeFormat.CLOCK_24H` (2 rings),
+depending on the location of the device:
 
-```
+```kt
 val isSystem24Hour = is24HourFormat(this)
 val clockFormat = if (isSystem24Hour) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H
+```
+
+The time picker's input mode defaults to clock mode (`INPUT_MODE_CLOCK`) with
+`TimeFormat.CLOCK_12H` and text input mode (`INPUT_MODE_KEYBOARD`) with `TimeFormat.CLOCK_24H`.
+
+The time picker can be started in clock mode with:
+
+```kt
+MaterialTimePicker.Builder().setInputMode(INPUT_MODE_CLOCK)
 ```
 
 The time picker can be started in text input mode with:
@@ -73,7 +88,7 @@ To show the time picker to the user:
 
 Subscribe to positive button click, negative button click, cancel and dismiss events with the following calls:
 
-```
+```kt
 picker.addOnPositiveButtonClickListener {
     // call back code
 }
@@ -99,7 +114,7 @@ Use a descriptive title that for the task:
 ```kt
 val picker =
    MaterialTimePicker.Builder()
-       .setTitle("Select Appointment time")
+       .setTitleText("Select Appointment time")
    ...
 ```
 
@@ -122,10 +137,10 @@ Element                         | Attribute                      | Related metho
 ------------------------------- | ------------------------------ | ----------------------------------------------------- | -------------
 **Hour**                        | `N/A`                          | `Builder.setHour`<br>`MaterialTimePicker.getHour`     | `0`
 **Minute**                      | `N/A`                          | `Builder.setMinute`<br>`MaterialTimePicker.getMinute` | `0`
-**Title**                       | `N/A`                          | `Builder.setTitle`                                    | `Select Time`
+**Title**                       | `N/A`                          | `Builder.setTitleText`                                | `Select Time`
 **Keyboard Icon**               | `app:keyboardIcon`             | `N/A`                                                 | `@drawable/ic_keyboard_black_24dp`
 **Clock Icon**                  | `app:clockIcon`                | `N/A`                                                 | `@drawable/ic_clock_black_24dp`
-**Clock face Background Color** | `app:clockFaceBackgroundColor` | `N/A`                                                 | `?attr/colorSurfaceVariant`
+**Clock face Background Color** | `app:clockFaceBackgroundColor` | `N/A`                                                 | `?attr/colorSurfaceContainerHighest`
 **Clock hand color**            | `app:clockNumberTextColor`     | `N/A`                                                 | `?attr/colorPrimary`
 **Clock Number Text Color**     | `app:clockNumberTextColor`     | `N/A`                                                 | `?attr/colorOnBackground`
 
