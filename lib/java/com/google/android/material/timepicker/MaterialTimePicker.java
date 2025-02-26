@@ -19,6 +19,7 @@ package com.google.android.material.timepicker;
 import com.google.android.material.R;
 
 import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
+import static com.google.android.material.timepicker.TimeFormat.CLOCK_24H;
 
 import android.app.Dialog;
 import android.content.Context;
@@ -50,18 +51,25 @@ import androidx.annotation.RestrictTo;
 import androidx.annotation.StringRes;
 import androidx.annotation.StyleRes;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityEventCompat;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.resources.MaterialAttributes;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.timepicker.TimePickerView.OnDoubleTapListener;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/** A {@link Dialog} with a clock display and a clock face to choose the time. */
+/**
+ * A {@link Dialog} with a clock display and a clock face to choose the time.
+ *
+ * <p>For more information, see the <a
+ * href="https://github.com/material-components/material-components-android/blob/master/docs/components/TimePicker.md">component
+ * developer guidance</a> and <a href="https://material.io/components/time-pickers/overview">design
+ * guidelines</a>.
+ */
 public final class MaterialTimePicker extends DialogFragment implements OnDoubleTapListener {
 
   private final Set<OnClickListener> positiveButtonListeners = new LinkedHashSet<>();
@@ -118,7 +126,9 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
     MaterialTimePicker fragment = new MaterialTimePicker();
     Bundle args = new Bundle();
     args.putParcelable(TIME_MODEL_EXTRA, options.time);
-    args.putInt(INPUT_MODE_EXTRA, options.inputMode);
+    if (options.inputMode != null) {
+      args.putInt(INPUT_MODE_EXTRA, options.inputMode);
+    }
     args.putInt(TITLE_RES_EXTRA, options.titleTextResId);
     if (options.titleText != null) {
       args.putCharSequence(TITLE_TEXT_EXTRA, options.titleText);
@@ -175,9 +185,6 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
   public final Dialog onCreateDialog(@Nullable Bundle bundle) {
     Dialog dialog = new Dialog(requireContext(), getThemeResId());
     Context context = dialog.getContext();
-    int surfaceColor =
-        MaterialAttributes.resolveOrThrow(
-            context, R.attr.colorSurface, MaterialTimePicker.class.getCanonicalName());
 
     MaterialShapeDrawable background =
         new MaterialShapeDrawable(
@@ -195,18 +202,19 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
 
     clockIcon = a.getResourceId(R.styleable.MaterialTimePicker_clockIcon, 0);
     keyboardIcon = a.getResourceId(R.styleable.MaterialTimePicker_keyboardIcon, 0);
+    int backgroundColor = a.getColor(R.styleable.MaterialTimePicker_backgroundTint, 0);
 
     a.recycle();
 
     background.initializeElevationOverlay(context);
-    background.setFillColor(ColorStateList.valueOf(surfaceColor));
+    background.setFillColor(ColorStateList.valueOf(backgroundColor));
     Window window = dialog.getWindow();
     window.setBackgroundDrawable(background);
     window.requestFeature(Window.FEATURE_NO_TITLE);
     // On some Android APIs the dialog won't wrap content by default. Explicitly update here.
     window.setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     // This has to be done after requestFeature() is called on API <= 23.
-    background.setElevation(ViewCompat.getElevation(window.getDecorView()));
+    background.setElevation(window.getDecorView().getElevation());
 
     return dialog;
   }
@@ -240,7 +248,8 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
     if (time == null) {
       time = new TimeModel();
     }
-    inputMode = bundle.getInt(INPUT_MODE_EXTRA, INPUT_MODE_CLOCK);
+    int defaultInputMode = time.format == CLOCK_24H ? INPUT_MODE_KEYBOARD : INPUT_MODE_CLOCK;
+    inputMode = bundle.getInt(INPUT_MODE_EXTRA, defaultInputMode);
     titleResId = bundle.getInt(TITLE_RES_EXTRA, 0);
     titleText = bundle.getCharSequence(TITLE_TEXT_EXTRA);
     positiveButtonTextResId = bundle.getInt(POSITIVE_BUTTON_TEXT_RES_EXTRA, 0);
@@ -317,6 +326,21 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
         });
 
     return root;
+  }
+
+  @Override
+  public void onViewCreated(@NonNull View view, @Nullable Bundle bundle) {
+    super.onViewCreated(view, bundle);
+    // TODO(b/246354286): Investigate issue with keyboard not showing on Android 12+
+    if (activePresenter instanceof TimePickerTextInputPresenter) {
+      view.postDelayed(
+          () -> {
+            if (activePresenter instanceof TimePickerTextInputPresenter) {
+              ((TimePickerTextInputPresenter) activePresenter).resetChecked();
+            }
+          },
+          100);
+    }
   }
 
   @Override
@@ -538,7 +562,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
 
     private TimeModel time = new TimeModel();
 
-    private int inputMode;
+    @Nullable private Integer inputMode;
     @StringRes
     private int titleTextResId = 0;
     private CharSequence titleText;
@@ -552,6 +576,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
 
     /** Sets the input mode with which to start the time picker. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setInputMode(@InputMode int inputMode) {
       this.inputMode = inputMode;
       return this;
@@ -564,6 +589,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
      *     and should always be a number in the [0, 23] range.
      */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setHour(@IntRange(from = 0, to = 23) int hour) {
       time.setHourOfDay(hour);
       return this;
@@ -571,6 +597,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
 
     /** Sets the minute with which to start the time picker. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setMinute(@IntRange(from = 0, to = 59) int minute) {
       time.setMinute(minute);
       return this;
@@ -583,6 +610,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
      *     CLOCK_24} 24 hour format without toggle.
      */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setTimeFormat(@TimeFormat int format) {
       int hour = time.hour;
       int minute = time.minute;
@@ -592,55 +620,49 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
       return this;
     }
 
-    /**
-     * Sets the text used to guide the user at the top of the picker.
-     */
+    /** Sets the text used to guide the user at the top of the picker. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setTitleText(@StringRes int titleTextResId) {
       this.titleTextResId = titleTextResId;
       return this;
     }
 
-    /**
-     * Sets the text used to guide the user at the top of the picker.
-     */
+    /** Sets the text used to guide the user at the top of the picker. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setTitleText(@Nullable CharSequence charSequence) {
       this.titleText = charSequence;
       return this;
     }
 
-    /**
-     * Sets the text used in the positive action button.
-     */
+    /** Sets the text used in the positive action button. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setPositiveButtonText(@StringRes int positiveButtonTextResId) {
       this.positiveButtonTextResId = positiveButtonTextResId;
       return this;
     }
 
-    /**
-     * Sets the text used in the positive action button.
-     */
+    /** Sets the text used in the positive action button. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setPositiveButtonText(@Nullable CharSequence positiveButtonText) {
       this.positiveButtonText = positiveButtonText;
       return this;
     }
 
-    /**
-     * Sets the text used in the negative action button.
-     */
+    /** Sets the text used in the negative action button. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setNegativeButtonText(@StringRes int negativeButtonTextResId) {
       this.negativeButtonTextResId = negativeButtonTextResId;
       return this;
     }
 
-    /**
-     * Sets the text used in the negative action button.
-     */
+    /** Sets the text used in the negative action button. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setNegativeButtonText(@Nullable CharSequence negativeButtonText) {
       this.negativeButtonText = negativeButtonText;
       return this;
@@ -648,6 +670,7 @@ public final class MaterialTimePicker extends DialogFragment implements OnDouble
 
     /** Sets the theme for the time picker. */
     @NonNull
+    @CanIgnoreReturnValue
     public Builder setTheme(@StyleRes int themeResId) {
       this.overrideThemeResId = themeResId;
       return this;
