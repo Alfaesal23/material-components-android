@@ -14,11 +14,21 @@ navigation and key actions at the bottom of mobile screens.
 
 ![Purple bottom app bar with floating action button](assets/bottomappbar/bottom-app-bar-hero.png)
 
+**Note:** This doc reflects the Bottom App Bar after the changes in 1.7 to
+reflect the current M3 style. Use `Widget.Material3.BottomAppBar.Legacy` to
+revert back to the previous style.
+
 **Contents**
 
+*   [Design and API Documentation](#design-and-api-documentation)
 *   [Using bottom app bars](#using-bottom-app-bars)
 *   [Bottom app bar](#bottom-app-bar)
 *   [Theming bottom app bars](#theming-bottom-app-bars)
+
+## Design and API Documentation
+
+*   [Google Material3 Spec](https://material.io/components/bottom-app-bar/overview)
+*   [API Reference](https://developer.android.com/reference/com/google/android/material/bottomappbar/package-summary)
 
 ## Using bottom app bars
 
@@ -61,10 +71,38 @@ in the menu:
 </menu>
 ```
 
+#### Talkback
+
+Bottom app bar can optionally hide on scroll with the `app:hideOnScroll`
+attribute. When this attribute is set to true, scrolling will hide the bottom
+app bar and prevent it from being seen by any screen readers which may be
+confusing for users.
+
+When Talkback is enabled, this behavior should be disabled by setting
+`bottomAppBar.setHideOnScroll(false)`. Additionally, disabling this behavior
+causes any content to be obscured, make sure to add the appropriate bottom
+padding of the height of the bottom app bar to the content. See below for an
+example:
+
+```
+val am = context.getSystemService(AccessibilityManager::class.java)
+if (am != null && am.isTouchExplorationEnabled) {
+    bar.setHideOnScroll(false)
+    bar.post {
+        content.setPadding(
+            content.paddingLeft,
+            content.paddingTop,
+            content.paddingRight,
+            content.paddingBottom + bar.measuredHeight
+        )
+    }
+}
+```
+
 ## Bottom app bar
 
-Bottom app bars provide access to a bottom navigation drawer and up to four
-actions, including the floating action button.
+Bottom app bars provide access to up to four actions, including the
+[floating action button](FloatingActionButton.md) (FAB).
 
 ### Bottom app bar examples
 
@@ -79,8 +117,8 @@ API and source code:
     *   [Class definition](https://developer.android.com/reference/com/google/android/material/floatingactionbutton/FloatingActionButton)
     *   [Class source](https://github.com/material-components/material-components-android/tree/master/lib/java/com/google/android/material/floatingactionbutton/FloatingActionButton.java)
 
-The following example shows a bottom app bar with an action icon, a cradled FAB,
-and an overflow menu.
+The following example shows a bottom app bar with a navigation icon, 3 action
+icons, and an embedded FAB.
 
 ![Purple bottom app bar with grey icons and purple inset floating action button](assets/bottomappbar/bottomappbar_basic.png)
 
@@ -128,21 +166,26 @@ In `menu/bottom_app_bar.xml`:
 ```xml
 <menu
       ...>
+    <item
+      android:id="@+id/accelerator"
+      android:icon="@drawable/ic_accelerator_24px"
+      android:title="@string/accelerator"
+      android:contentDescription="@string/content_description_accelerator"
+      app:showAsAction="ifRoom"/>
 
     <item
-        android:id="@+id/search"
-        android:icon="@drawable/ic_search_24dp"
-        android:title="@string/search"
-        android:contentDescription="@string/content_description_search"
-        app:showAsAction="ifRoom"
-        />
+      android:id="@+id/rotation"
+      android:icon="@drawable/ic_3d_rotation_24px"
+      android:title="@string/rotation"
+      android:contentDescription="@string/content_description_rotation"
+      app:showAsAction="ifRoom"/>
 
     <item
-        android:id="@+id/more"
-        android:title="@string/more"
-        android:contentDescription="@string/content_description_more"
-        app:showAsAction="never"
-        />
+      android:id="@+id/dashboard"
+      android:icon="@drawable/ic_dashboard_24px"
+      android:title="@string/dashboard"
+      android:contentDescription="@string/content_description_dashboard"
+      app:showAsAction="ifRoom"/>
 
 </menu>
 ```
@@ -166,12 +209,16 @@ bottomAppBar.setNavigationOnClickListener {
 
 bottomAppBar.setOnMenuItemClickListener { menuItem ->
     when (menuItem.itemId) {
-        R.id.search -> {
-            // Handle search icon press
+        R.id.accelerator -> {
+            // Handle accelerator icon press
             true
         }
-        R.id.more -> {
-            // Handle more item (inside overflow menu) press
+        R.id.rotation -> {
+            // Handle rotation icon press
+            true
+        }
+        R.id.dashboard -> {
+            // Handle dashboard icon press
             true
         }
         else -> false
@@ -208,18 +255,19 @@ floating action button (FAB), action item(s) and an overflow menu.
 ![Bottom app bar anatomy diagram](assets/bottomappbar/bottom-app-bar-anatomy.png)
 
 1.  Container
-2.  Navigation icon (optional)
-3.  Floating action button (FAB) (optional)
-4.  Action item(s) (optional)
+2.  Floating action button (FAB) (optional)
+3.  Action item(s) (optional)
+4.  Navigation icon (optional)
 5.  Overflow menu (optional)
 
 ### Container attributes
 
-Element       | Attribute            | Related method(s)                          | Default value
-------------- | -------------------- | ------------------------------------------ | -------------
-**Color**     | `app:backgroundTint` | `setBackgroundTint`<br>`getBackgroundTint` | `?attr/colorSurface`
-**Elevation** | `app:elevation`      | `setElevation`                             | `3dp`
-**Height**    | `android:minHeight`  | `setMinimumHeight`<br>`getMinimumHeight`   | `56dp` (default) and `64dp` (w600dp)
+Element       | Attribute                | Related method(s)                          | Default value
+------------- | ------------------------ | ------------------------------------------ | -------------
+**Color**     | `app:backgroundTint`     | `setBackgroundTint`<br>`getBackgroundTint` | `?attr/colorSurfaceContainer`
+**Elevation** | `app:elevation`          | `setElevation`                             | `3dp`
+**Height**    | `android:minHeight`      | `setMinimumHeight`<br>`getMinimumHeight`   | `80dp`
+**Shadows**   | `app:addElevationShadow` | N/A                                        | `false`
 
 ### Navigation icon attributes
 
@@ -232,14 +280,14 @@ Element   | Attribute                | Related method(s)                        
 
 Element                          | Attribute                          | Related method(s)                                                      | Default value
 -------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | -------------
-**Alignment mode**               | `app:fabAlignmentMode`             | `setFabAlignmentMode`<br>`getFabAlignmentMode`                         | `center`
+**Alignment mode**               | `app:fabAlignmentMode`             | `setFabAlignmentMode`<br>`getFabAlignmentMode`                         | `end`
 **Animation mode**               | `app:fabAnimationMode`             | `setFabAnimationMode`<br>`getFabAnimationMode`                         | `slide`
-**Anchor mode**                  | `app:fabAnchorMode`                | `setFabAnchorMode` <br> `getFabAnchorMode`                             | `cradle`
+**Anchor mode**                  | `app:fabAnchorMode`                | `setFabAnchorMode` <br> `getFabAnchorMode`                             | `embed`
 **Cradle margin**                | `app:fabCradleMargin`              | `setFabCradleMargin`<br>`getFabCradleMargin`                           | `6dp`
 **Cradle rounded corner radius** | `app:fabCradleRoundedCornerRadius` | `setFabCradleRoundedCornerRadius`<br>`getFabCradleRoundedCornerRadius` | `4dp`
 **Cradle vertical offset**       | `app:fabCradleVerticalOffset`      | `setCradleVerticalOffset`<br>`getCradleVerticalOffset`                 | `12dp`
-**End margin**                   | `app:fabAlignmentModeEndMargin`    | `setFabAlignmentModeEndMargin` <br> `getFabAlignmentModeEndMargin`     | N/A
-**Embedded elevation**           | `app:removeEmbeddedFabElevation`   | N/A   | `true`
+**End margin**                   | `app:fabAlignmentModeEndMargin`    | `setFabAlignmentModeEndMargin` <br> `getFabAlignmentModeEndMargin`     | `16dp`
+**Embedded elevation**           | `app:removeEmbeddedFabElevation`   | N/A                                                                    | `true`
 
 See the
 [FAB documentation](https://github.com/material-components/material-components-android/tree/master/docs/components/FloatingActionButton.md)
@@ -251,7 +299,7 @@ Element            | Attribute               | Related method(s)                
 ------------------ | ----------------------- | -------------------------------------------------- | -------------
 **Menu**           | `app:menu`              | `replaceMenu`<br>`getMenu`                         | `null`
 **Icon color**     | N/A                     | N/A                                                | `?attr/colorControlNormal` (as `Drawable` tint)
-**Alignment mode** | `app:menuAlignmentMode` | `setMenuAlignmentMode` <br> `getMenuAlignmentMode` | `auto`
+**Alignment mode** | `app:menuAlignmentMode` | `setMenuAlignmentMode` <br> `getMenuAlignmentMode` | `start`
 
 ### Overflow menu attributes
 
@@ -307,12 +355,12 @@ bottom app bars and FABs and affects other components:
 ```xml
 <style name="Theme.App" parent="Theme.Material3.*">
     ...
-    <item name="colorPrimary">@color/shrine_pink_100</item>
-    <item name="colorOnPrimary">@color/shrine_pink_900</item>
-    <item name="colorSecondary">@color/shrine_pink_50</item>
-    <item name="colorOnSecondary">@color/shrine_pink_900</item>
+    <item name="colorSurfaceContainer">@color/shrine_pink_100</item>
+    <item name="colorOnSurface">@color/shrine_pink_900</item>
+    <item name="colorPrimaryContainer">@color/shrine_pink_50</item>
+    <item name="colorOnPrimaryContainer">@color/shrine_pink_900</item>
     <item name="textAppearanceTitleMedium">@style/TextAppearance.App.Medium</item>
-    <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.App.SmallComponent</item>
+    <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.App.Corner.Large</item>
 </style>
 
 <style name="TextAppearance.App.Medium" parent="TextAppearance.Material3.TitleMedium">
@@ -320,9 +368,9 @@ bottom app bars and FABs and affects other components:
     <item name="android:fontFamily">@font/rubik</item>
 </style>
 
-<style name="ShapeAppearance.App.SmallComponent" parent="ShapeAppearance.Material3.SmallComponent">
+<style name="ShapeAppearance.App.Corner.Large" parent="ShapeAppearance.Material3.Corner.Large">
     <item name="cornerFamily">cut</item>
-    <item name="cornerSize">4dp</item>
+    <item name="cornerSize">50%</item>
 </style>
 ```
 
@@ -340,20 +388,20 @@ theme to all bottom app bars and FABs but does not affect other components:
     <item name="materialThemeOverlay">@style/ThemeOverlay.App.BottomAppBar</item>
 </style>
 
-<style name="Widget.App.FloatingActionButton" parent="Widget.Material3.FloatingActionButton">
+<style name="Widget.App.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary">
     <item name="materialThemeOverlay">@style/ThemeOverlay.App.FloatingActionButton</item>
 </style>
 
-<style name="ThemeOverlay.App.BottomAppBar" parent="">
-    <item name="colorPrimary">@color/shrine_pink_100</item>
-    <item name="colorOnPrimary">@color/shrine_pink_900</item>
+<style name="ThemeOverlay.App.BottomAppBar" parent="ThemeOverlay.Material3.BottomAppBar">
+    <item name="colorSurfaceContainer">@color/shrine_pink_100</item>
+    <item name="colorOnSurface">@color/shrine_pink_900</item>
     <item name="textAppearanceTitleMedium">@style/TextAppearance.App.TitleMedium</item>
 </style>
 
-<style name="ThemeOverlay.App.FloatingActionButton" parent="">
-    <item name="colorSecondary">@color/shrine_pink_50</item>
-    <item name="colorOnSecondary">@color/shrine_pink_900</item>
-    <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.App.SmallComponent</item>
+<style name="ThemeOverlay.App.FloatingActionButton" parent="ThemeOverlay.Material3.FloatingActionButton.Primary">
+    <item name="colorPrimaryContainer">@color/shrine_pink_50</item>
+    <item name="colorOnPrimaryContainer">@color/shrine_pink_900</item>
+    <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.App.Corner.Large</item>
 </style>
 ```
 
@@ -370,18 +418,3 @@ Use the styles in the layout, which affects only this bottom app bar and FAB:
     style="@style/Widget.App.FloatingActionButton"
     />
 ```
-
-In code:
-
-```kt
-val topEdge = BottomAppBarCutCornersTopEdge(
-    bottomAppBar.fabCradleMargin,
-    bottomAppBar.fabCradleRoundedCornerRadius,
-    bottomAppBar.cradleVerticalOffset
-)
-val background = bottomAppBar.background as MaterialShapeDrawable
-background.shapeAppearanceModel = background.shapeAppearanceModel.toBuilder().setTopEdge(topEdge).build()
-```
-
-**Note:** Using `BottomAppBarCutCornersTopEdge` is not necessary with rounded
-shapeAppearance corners.

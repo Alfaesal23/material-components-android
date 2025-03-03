@@ -1,12 +1,10 @@
 buildscript {
-  ext.kotlinVersion = '1.3.50'
   repositories {
     google()
     mavenCentral()
   }
   dependencies {
-    classpath 'com.android.tools.build:gradle:7.2.0'
-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+    classpath 'com.android.tools.build:gradle:8.7.3'
   }
 }
 
@@ -19,47 +17,49 @@ allprojects {
 }
 
 ext {
-  compileSdkVersion = 32
-  minSdkVersion = 14
-  targetSdkVersion = 32
+  compileSdkVersion = 34
+  minSdkVersion = 21
+  targetSdkVersion = 33
 
   androidXVersions = [
-    annotation            : '1.2.0',
-    appCompat             : '1.5.0-beta01', // To include SwitchCompat fixes
-    cardView              : '1.0.0',
-    constraintlayout      : '2.0.1',
-    coordinatorlayout     : '1.1.0',
-    core                  : '1.6.0',
-    drawerlayout          : '1.1.1',
-    experimental          : '1.0.0',
-    fragment              : '1.2.5',
-    lifecycle             : '2.0.0',
-    recyclerView          : '1.0.0',
-    recyclerViewSelection : '1.0.0',
-    transition            : '1.2.0',
-    vectorDrawable        : '1.1.0',
-    viewpager2            : '1.0.0',
-    dynamicanimation      : '1.0.0',
+    activity                     : '1.8.0',
+    annotation                   : '1.2.0',
+    appCompat                    : '1.6.1',
+    cardView                     : '1.0.0',
+    constraintlayout             : '2.0.1',
+    coordinatorlayout            : '1.1.0',
+    core                         : '1.6.0',
+    drawerlayout                 : '1.2.0',
+    experimental                 : '1.0.0',
+    fragment                     : '1.2.5',
+    lifecycle                    : '2.0.0',
+    recyclerView                 : '1.0.0',
+    recyclerViewSelection        : '1.0.0',
+    resourceInspectionAnnotation : '1.0.1',
+    resourceInspectionProcessor  : '1.0.1',
+    transition                   : '1.5.0',
+    vectorDrawable               : '1.1.0',
+    viewpager2                   : '1.0.0',
+    dynamicanimation             : '1.0.0',
+    graphicsShapes               : '1.0.1',
   ]
 
+  errorproneVersion = '2.15.0'
   testRunnerVersion = '1.4.0'
   espressoVersion = '3.1.0'
   mockitoCoreVersion = '2.25.0'
   truthVersion = '0.45'
-  robolectricVersion = '4.8-alpha-1'
+  robolectricVersion = '4.13'
 
   // Enforce the use of prebuilt dependencies in all sub-projects. This is
   // required for the doclava dependency.
   usePrebuilts = "true"
 
-  // Disable pre-dexing when gradle called with -PdisablePreDex;
-  preDexLibs = !project.hasProperty('disablePreDex')
-
   mavenRepoUrl = (project.hasProperty('mavenRepoUrl')
     ? project.property('mavenRepoUrl') : '/tmp/myRepo/')
 
   // Current version of the library (could be in-development/unreleased).
-  mdcLibraryVersion = '1.7.0-alpha03'
+  mdcLibraryVersion = '1.13.0-alpha11'
   mdcLibraryPackage = "com.google.android.material"
   mdcLibraryDir = "com/google/android/material"
 }
@@ -88,6 +88,8 @@ private def getTransformedProjectPath(projectPath) {
  */
 def compatibility(name) {
   switch (name) {
+    case "activity":
+      return "androidx.activity:activity:${androidXVersions.activity}"
     case "annotation":
       return "androidx.annotation:annotation:${androidXVersions.annotation}"
     case "appcompat":
@@ -116,8 +118,14 @@ def compatibility(name) {
       return "androidx.vectordrawable:vectordrawable:${androidXVersions.vectorDrawable}"
     case "recyclerViewSelection":
       return "androidx.recyclerview:recyclerview-selection:${androidXVersions.recyclerViewSelection}"
+    case "resourceInspectionAnnotation":
+      return "androidx.resourceinspection:resourceinspection-annotation:${androidXVersions.resourceInspectionAnnotation}"
+    case "resourceInspectionProcessor":
+      return "androidx.resourceinspection:resourceinspection-processor:${androidXVersions.resourceInspectionProcessor}"
     case "viewpager2":
       return "androidx.viewpager2:viewpager2:${androidXVersions.viewpager2}"
+    case "graphicsShapes":
+      return "androidx.graphics:graphics-shapes:${androidXVersions.graphicsShapes}"
     case "experimental":
       return "androidx.annotation:annotation-experimental:${androidXVersions.experimental}"
     default:
@@ -190,9 +198,6 @@ subprojects {
     }
 
     if (isAndroidLibrary || isAndroidApp || isAndroidTest) {
-      // Disable pre-dexing when gradle called with -PdisablePreDex;
-      project.android.dexOptions.preDexLibraries = rootProject.ext.preDexLibs
-
       project.android {
         compileSdkVersion rootProject.ext.compileSdkVersion
 
@@ -202,14 +207,14 @@ subprojects {
         // This disables the builds tools automatic vector -> PNG generation
         defaultConfig.generatedDensities = []
 
-        compileOptions.sourceCompatibility JavaVersion.VERSION_1_8
-        compileOptions.targetCompatibility JavaVersion.VERSION_1_8
+        compileOptions.sourceCompatibility JavaVersion.VERSION_17
+        compileOptions.targetCompatibility JavaVersion.VERSION_17
 
         aaptOptions.additionalParameters "--no-version-vectors"
 
         android {
-          lintOptions {
-            check 'NewApi'
+          lint {
+            checkOnly 'NewApi'
           }
         }
 
